@@ -1,0 +1,13 @@
+# Checker input only: no Compose services, images, or build contexts.
+x-lab-services:
+  report-worker:
+    privileged: true
+    network_mode: host
+    pid: host
+    volumes:
+      - /etc:/reference:ro
+      - type: bind
+        source: /run/docker.sock
+        target: /reference/runtime.sock
+        read_only: true
+    user: "0:0"

@@ -1,0 +1,10 @@
+# Checker input only: no Compose services, images, or build contexts.
+x-lab-services:
+  report-worker:
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - type: tmpfs
+        target: /tmp
