@@ -50,6 +50,7 @@ SENSITIVE_BIND report-worker.volumes[1]: Runtime socket bind; remove it and use 
 | --- | --- |
 | `PRIVILEGED` | `privileged` must be absent or `false`. |
 | `HOST_NAMESPACE` | `network_mode`, `pid`, `ipc`, `uts`, `cgroup`, and `userns_mode` cannot be the literal `host`. Each host setting gets its own finding. |
+| `DEVICE_ACCESS` | Leave `devices` and `device_cgroup_rules` absent or empty. Each nonempty field gets a finding regardless of the requested permissions. |
 | `SENSITIVE_BIND` | A bind source must not be `/` or overlap `/boot`, `/dev`, `/etc`, `/proc`, `/root`, `/run`, `/sys`, `/var/lib/docker`, or `/var/run`. The rule flags ancestors and descendants on path-component boundaries. It also flags a bind when the source or target basename is `docker.sock`, `containerd.sock`, or `podman.sock`. Read-only binds are checked too. |
 | `READ_ONLY` | Set `read_only: true`. The rule applies to the root filesystem, not separate mounts. |
 | `NONROOT_USER` | Set an explicit numeric UID from 1 to 4294967294. If supplying a GID, use the same range. Quote UID:GID pairs, e.g. `user: "10001:10001"`. The checker cannot verify that a numeric ID exists in the image. |
@@ -62,7 +63,7 @@ SENSITIVE_BIND report-worker.volumes[1]: Runtime socket bind; remove it and use 
 - One UTF-8 YAML file up to 256 KiB and 32 nested YAML levels, with a nonempty `services` mapping. Lab fixtures use only the `x-lab-services` top-level key. All services are checked, including those assigned to profiles. The checker rejects duplicate or non-string YAML keys, explicit tags, anchors, aliases, and Compose interpolation/dollar escapes in scalars.
 - Review a self-contained Linux configuration. The checker does not load overrides or environment files; `include`, `extends`, and `volumes_from` are rejected. If your actual stack uses dynamically selected configuration, review a separately prepared, resolved static file and account for any inputs it leaves out.
 - Supports short Linux mount syntax and long `bind`, `volume`, and `tmpfs` syntax. Named volumes with external declarations, custom names, non-local drivers, or driver options are rejected. Paths are normalized lexically: the checker does not resolve relative binds against the project directory, resolve symlinks, inspect the host, or identify arbitrary socket names.
-- This is a targeted policy check, not a Compose schema validator or a production security review. It does not evaluate image defaults, device grants, service-to-service namespace sharing, other security options, port exposure, or writable mount permissions. A zero finding count only means the listed rules passed on the supplied file.
+- This is a targeted policy check, not a Compose schema validator or a production security review. It does not evaluate image defaults, GPU requests (`gpus` or deploy device reservations), service-to-service namespace sharing, other security options, port exposure, or writable mount permissions. A zero finding count only means the listed rules passed on the supplied file.
 
 ## Verification
 

@@ -211,6 +211,10 @@ def check_service(service_name: str, raw: object, location: str) -> list[Finding
         if field in service and string(service[field], f"{location}.{field}") == "host":
             add("HOST_NAMESPACE", field, "Remove host mode to preserve namespace isolation.")
 
+    for field in ("devices", "device_cgroup_rules"):
+        if strings(service, field, location):
+            add("DEVICE_ACCESS", field, "Remove explicit device grants for this restrictive baseline.")
+
     for index, volume in enumerate(sequence(service, "volumes", location)):
         field = f"volumes[{index}]"
         paths = bind_paths(volume, f"{location}.{field}")

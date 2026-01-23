@@ -58,6 +58,15 @@ class PolicyTests(unittest.TestCase):
     def test_non_host_modes_are_not_flagged(self):
         self.assertEqual(codes(service_document(network_mode="none", ipc="private")), [])
 
+    def test_explicit_device_grants_are_flagged_per_field(self):
+        for fields in ({"devices": ["example.invalid/lab=sample"]},
+                       {"device_cgroup_rules": ["c 240:0 r"]}):
+            with self.subTest(fields=fields):
+                findings = assess(service_document(**fields))
+                self.assertEqual([(f.code, f.field) for f in findings],
+                                 [("DEVICE_ACCESS", next(iter(fields)))])
+        self.assertEqual(assess(service_document(devices=[], device_cgroup_rules=[])), [])
+
     def test_sensitive_bind_flags_ro_and_normalizes_paths(self):
         findings = assess(service_document(volumes=[
             "/sys/kernel:/reference:ro",
@@ -184,6 +193,14 @@ class InputTests(unittest.TestCase):
                 assess(service_document(**changes))
         with self.assertRaisesRegex(InputError, "expected a boolean"):
             assess("services: {worker: {privileged: yes}}")
+
+    def test_device_grants_require_lists_of_strings(self):
+        for field in ("devices", "device_cgroup_rules"):
+            for value, reason in (("example", "expected a list"), ([None], "expected a nonempty")):
+                with self.subTest(field=field, value=value), self.assertRaisesRegex(
+                    InputError, rf"services\.worker\.{field}.*: {reason}"
+                ):
+                    assess(service_document(**{field: value}))
 
     def test_invalid_or_unsupported_mounts(self):
         for mount in ("name:relative", "/source:/target:bogus", "~/data:/target", "C:\\data:/target",
