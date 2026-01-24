@@ -95,6 +95,13 @@ class Finding:
     message: str
 
 
+@dataclass(frozen=True)
+class BindMount:
+    source: str
+    target: str
+    read_only: bool
+
+
 def mapping(value, field: str) -> dict:
     if not isinstance(value, dict):
         raise InputError(f"{field}: expected a mapping")
@@ -132,14 +139,19 @@ def strings(service: dict, field: str, location: str) -> list[str]:
             for i, item in enumerate(sequence(service, field, location))]
 
 
-def bind_paths(value, field: str) -> tuple[str, str] | None:
-    """Validate a supported mount entry and return paths for host binds only."""
+def bind_mount(value, field: str) -> BindMount | None:
+    """Validate a supported mount entry and describe host binds only."""
     if isinstance(value, str):
         parts = string(value, field).split(":")
         if len(parts) > 3 or (len(parts) > 1 and not parts[0]):
             raise InputError(f"{field}: expected target or source:target[:options]")
-        if len(parts) == 3 and not set(parts[2].split(",")) <= MOUNT_OPTIONS:
+        options = parts[2].split(",") if len(parts) == 3 else []
+        if not set(options) <= MOUNT_OPTIONS:
             raise InputError(f"{field}: unsupported short mount options")
+        access_modes = [option for option in options if option in ("ro", "rw")]
+        if len(access_modes) > 1:
+            raise InputError(f"{field}: specify at most one short mount access mode (ro or rw)")
+        read_only = access_modes == ["ro"]
         source, target = (None, parts[0]) if len(parts) == 1 else parts[:2]
         kind = "bind" if source is not None and is_host_path(source) else "volume"
     else:
@@ -150,13 +162,14 @@ def bind_paths(value, field: str) -> tuple[str, str] | None:
         source, target = entry.get("source"), entry.get("target")
         if "source" in entry:
             string(source, f"{field}.source")
+        read_only = boolean(entry, "read_only", field)
 
     if not string(target, f"{field}.target").startswith("/"):
         raise InputError(f"{field}.target: expected an absolute Linux path")
     if kind == "bind":
         if source is None or not is_host_path(source):
             raise InputError(f"{field}.source: expected an absolute or dot-relative host path")
-        return source, target
+        return BindMount(source, target, read_only)
     if kind == "tmpfs" and source is not None:
         raise InputError(f"{field}.source: tmpfs must not have a source")
     if source is not None:
@@ -217,9 +230,13 @@ def check_service(service_name: str, raw: object, location: str) -> list[Finding
 
     for index, volume in enumerate(sequence(service, "volumes", location)):
         field = f"volumes[{index}]"
-        paths = bind_paths(volume, f"{location}.{field}")
-        if paths is not None and (reason := sensitive_bind(*paths)) is not None:
+        bind = bind_mount(volume, f"{location}.{field}")
+        if bind is None:
+            continue
+        if (reason := sensitive_bind(bind.source, bind.target)) is not None:
             add("SENSITIVE_BIND", field, reason)
+        if not bind.read_only:
+            add("WRITABLE_BIND", field, "Use ro or read_only: true for bind mounts that only need reads.")
 
     if not boolean(service, "read_only", location):
         add("READ_ONLY", "read_only", "Set read_only: true and allow writes only where needed.")

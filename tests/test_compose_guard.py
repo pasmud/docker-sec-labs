@@ -82,15 +82,35 @@ class PolicyTests(unittest.TestCase):
     def test_socket_detection_checks_source_or_target_basename(self):
         findings = assess(service_document(volumes=[
             "./docker.sock:/reference:ro",
-            {"type": "bind", "source": "/srv/example/data", "target": "/work/podman.sock"},
-            "/srv/example/containerd.sock:/reference:rw",
+            {"type": "bind", "source": "/srv/example/data", "target": "/work/podman.sock",
+             "read_only": True},
+            "/srv/example/containerd.sock:/reference:ro",
         ]))
         self.assertEqual([f.code for f in findings], ["SENSITIVE_BIND"] * 3)
         self.assertTrue(all("socket" in f.message for f in findings))
 
+    def test_bind_access_controls_in_both_syntaxes(self):
+        long_bind = {"type": "bind", "source": "./sample", "target": "/reference"}
+        for mount, expected in (
+            ("./sample:/reference:ro,Z", []),
+            ("./sample:/reference", ["WRITABLE_BIND"]),
+            ("./sample:/reference:rw,z", ["WRITABLE_BIND"]),
+            (long_bind | {"read_only": True}, []),
+            (long_bind | {"read_only": False}, ["WRITABLE_BIND"]),
+            (long_bind, ["WRITABLE_BIND"]),
+        ):
+            with self.subTest(mount=mount):
+                findings = assess(service_document(volumes=[mount]))
+                self.assertEqual([(f.code, f.field) for f in findings],
+                                 [(code, "volumes[0]") for code in expected])
+
+    def test_writable_sensitive_bind_reports_both_policy_failures(self):
+        self.assertEqual(codes(service_document(volumes=["/etc:/reference:rw"])),
+                         ["SENSITIVE_BIND", "WRITABLE_BIND"])
+
     def test_mount_kinds_and_path_boundaries(self):
         text = service_document(volumes=[
-            "/etc-backup:/ref:ro", "./sample/config:/example:ro", "/var/lib/docker-old:/archive",
+            "/etc-backup:/ref:ro", "./sample/config:/example:ro", "/var/lib/docker-old:/archive:ro",
             "docs:/docs:ro", "/anonymous", {"type": "volume", "source": "cache", "target": "/cache"},
             {"type": "tmpfs", "target": "/tmp"},
         ]) + "volumes: {docs: null, cache: {driver: local}}\n"
@@ -208,6 +228,17 @@ class InputTests(unittest.TestCase):
                       {"type": "bind", "target": "/mnt"}, {"type": "bind", "source": "not/a/path"},
                       {"type": "tmpfs", "source": "name", "target": "/mnt"}):
             with self.subTest(mount=mount), self.assertRaisesRegex(InputError, r"volumes\[0\]"):
+                assess(service_document(volumes=[mount]))
+
+    def test_ambiguous_mount_access_modes_are_rejected(self):
+        for options in ("ro,rw", "rw,ro", "ro,ro"):
+            with self.subTest(options=options), self.assertRaisesRegex(InputError, "at most one"):
+                assess(service_document(volumes=[f"./sample:/reference:{options}"]))
+        for value in (None, "true", 1):
+            mount = {"type": "bind", "source": "./sample", "target": "/reference", "read_only": value}
+            with self.subTest(value=value), self.assertRaisesRegex(
+                InputError, r"volumes\[0\]\.read_only: expected a boolean"
+            ):
                 assess(service_document(volumes=[mount]))
 
     def test_fixture_cannot_be_combined_with_services(self):
