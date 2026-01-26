@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 import tempfile
@@ -281,12 +282,44 @@ class CLITests(unittest.TestCase):
         result = cli(HARDENED)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "0 finding(s).\n", ""))
 
+    def test_json_clean_report(self):
+        result = cli("--format", "json", HARDENED)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(json.loads(result.stdout), {"schema_version": 1, "findings": []})
+
+    def test_json_is_deterministic_in_service_and_policy_order(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            observations = []
+            for index, services in enumerate(("{z: {}, a: {}}", "{a: {}, z: {}}")):
+                path = Path(folder) / f"input-{index}.yaml"
+                path.write_text(f"x-lab-services: {services}\n", encoding="utf-8")
+                result = cli(path, "--format", "json")
+                self.assertEqual((result.returncode, result.stderr), (1, ""))
+                observations.append(result.stdout)
+        first, second = observations
+        self.assertEqual(first, second)
+        self.assertTrue(first.endswith("\n"))
+        report = json.loads(first)
+        self.assertEqual(set(report), {"schema_version", "findings"})
+        self.assertEqual(report["schema_version"], 1)
+        expected = [
+            ("READ_ONLY", "read_only"), ("NONROOT_USER", "user"),
+            ("DROP_CAPABILITIES", "cap_drop"), ("NO_NEW_PRIVILEGES", "security_opt"),
+        ]
+        self.assertEqual([
+            (record["service"], record["code"], record["field"]) for record in report["findings"]
+        ], [(service, code, field) for service in ("a", "z") for code, field in expected])
+        for record in report["findings"]:
+            self.assertEqual(set(record), {"code", "service", "field", "message"})
+            self.assertTrue(record["message"])
+
     def test_read_and_parse_errors_exit_2_without_findings(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as folder:
             bad = Path(folder) / "bad.yaml"
             bad.write_text("services: {a: {}, z: {read_only: 'no'}}", encoding="utf-8")
-            for path in (bad, Path(folder), Path(folder) / "missing.yaml"):
-                with self.subTest(path=path):
-                    result = cli(path)
-                    self.assertEqual((result.returncode, result.stdout), (2, ""))
-                    self.assertTrue(result.stderr.startswith("Input error: "))
+            for output_format in ("text", "json"):
+                for path in (bad, Path(folder), Path(folder) / "missing.yaml"):
+                    with self.subTest(path=path, output_format=output_format):
+                        result = cli(path, "--format", output_format)
+                        self.assertEqual((result.returncode, result.stdout), (2, ""))
+                        self.assertTrue(result.stderr.startswith("Input error: "))

@@ -32,6 +32,14 @@ SENSITIVE_BIND report-worker.volumes[1]: Runtime socket bind; remove it and use 
 | `1` | One or more findings; printed to stdout, ordered by service name and policy rule. |
 | `2` | Invalid invocation, unreadable file, invalid input, or unsupported configuration; see stderr. No partial results are printed. |
 
+### Machine-readable output
+
+```sh
+python3 compose_guard.py --format json exercises/02-hardened.fixture.yaml
+```
+
+Text is the default. `--format json` emits one JSON object on stdout with `schema_version: 1` and a `findings` array (empty on a pass). Each finding has string fields `code`, `service`, `field`, and `message`. Findings keep the same order as text, including input order for mount entries. Reports contain no timestamps or input filenames. Use `code` rather than the human-facing `message` in scripts. Both formats use the exit codes above; exit `2` leaves stdout empty.
+
 ## Exercises
 
 1. **Review the risky fixture.** Open [`exercises/01-risky.fixture.yaml`](exercises/01-risky.fixture.yaml). Find the broad privilege grant, two host namespace settings, and two sensitive binds. Predict the four recommended controls that are absent or ineffective, then compare your review with the nine checker findings. A read-only filesystem bind still exposes its contents; a read-only socket mount does not limit the socket API to read-only operations.

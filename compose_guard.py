@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import posixpath
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import yaml
@@ -318,15 +319,22 @@ def read_input(path: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("file", type=Path, help="standalone Compose YAML file or inert lab fixture")
+    parser.add_argument(
+        "--format", choices=("text", "json"), default="text", help="output format (default: text)"
+    )
     args = parser.parse_args(argv)
     try:
         findings = assess(read_input(args.file))
     except InputError as exc:
         print(f"Input error: {exc}", file=sys.stderr)
         return 2
-    for result in findings:
-        print(f"{result.code} {result.service}.{result.field}: {result.message}")
-    print(f"{len(findings)} finding(s).")
+    if args.format == "json":
+        report = {"schema_version": 1, "findings": [asdict(result) for result in findings]}
+        print(json.dumps(report, indent=2))
+    else:
+        for result in findings:
+            print(f"{result.code} {result.service}.{result.field}: {result.message}")
+        print(f"{len(findings)} finding(s).")
     return 1 if findings else 0
 
 
