@@ -16,6 +16,7 @@ from yaml.nodes import MappingNode
 
 MAX_BYTES = 256 * 1024
 MAX_DEPTH = 32
+MAX_NODES = 8192
 FIXTURE_KEY = "x-lab-services"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
 ID = re.compile(r"[0-9]+(?::[0-9]+)?\Z")
@@ -46,6 +47,7 @@ class StaticLoader(yaml.SafeLoader):
         for first, entries in yaml.SafeLoader.yaml_implicit_resolvers.items()
     }
     depth = 0
+    nodes_seen = 0
 
     def compose_node(self, parent, index):
         event = self.peek_event()
@@ -58,6 +60,9 @@ class StaticLoader(yaml.SafeLoader):
             raise InputError(f"line {line}: Compose interpolation and dollar escapes are unsupported")
         if self.depth >= MAX_DEPTH:
             raise InputError(f"line {line}: YAML nesting exceeds {MAX_DEPTH} levels")
+        if self.nodes_seen >= MAX_NODES:
+            raise InputError(f"line {line}: YAML document exceeds {MAX_NODES} nodes")
+        self.nodes_seen += 1
         self.depth += 1
         try:
             return super().compose_node(parent, index)

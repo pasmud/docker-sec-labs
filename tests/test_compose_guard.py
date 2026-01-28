@@ -8,7 +8,7 @@ from textwrap import indent
 
 import yaml
 
-from compose_guard import MAX_BYTES, MAX_DEPTH, InputError, assess, read_input
+from compose_guard import MAX_BYTES, MAX_DEPTH, MAX_NODES, InputError, assess, read_input
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -185,6 +185,19 @@ class InputTests(unittest.TestCase):
         self.assertEqual(len(assess(nested(MAX_DEPTH - 2))), 4)
         with self.assertRaisesRegex(InputError, "nesting exceeds"):
             assess(nested(MAX_DEPTH - 1))
+
+    def test_node_limit_counts_shallow_content_even_in_ignored_extensions(self):
+        def wide(items):
+            return "services: {worker: {}}\nx-samples: [" + ",".join(["0"] * items) + "]\n"
+
+        # The document uses seven nodes before counting the sequence items.
+        limit = MAX_NODES - 7
+        self.assertEqual(len(assess(wide(limit))), 4)
+        over_limit = wide(limit + 1)
+        self.assertLess(len(over_limit.encode("utf-8")), MAX_BYTES)
+        with self.assertRaisesRegex(InputError, rf"line 2: YAML document exceeds {MAX_NODES} nodes"):
+            assess(over_limit)
+        self.assertEqual(assess(service_document()), [])
 
     def test_interpolation_and_dollar_escapes_are_not_evaluated(self):
         for expression in ("${REGISTRY}", "$REGISTRY", "$${REGISTRY}"):

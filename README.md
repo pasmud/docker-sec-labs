@@ -69,7 +69,7 @@ Text is the default. `--format json` emits one JSON object on stdout with `schem
 
 ## Supported input and limitations
 
-- One UTF-8 YAML file up to 256 KiB and 32 nested YAML levels, with a nonempty `services` mapping. Lab fixtures use only the `x-lab-services` top-level key. All services are checked, including those assigned to profiles. The checker rejects duplicate or non-string YAML keys, explicit tags, anchors, aliases, and Compose interpolation/dollar escapes in scalars.
+- One UTF-8 YAML file up to 256 KiB, 32 nested levels, and 8,192 YAML nodes, with a nonempty `services` mapping. The node limit covers the entire document, including unreviewed sections; mapping keys, scalar values, and collections all count. Lab fixtures use only the `x-lab-services` top-level key. All services are checked, including those assigned to profiles. The checker rejects duplicate or non-string YAML keys, explicit tags, anchors, aliases, and Compose interpolation/dollar escapes in scalars.
 - Review a self-contained Linux configuration. The checker does not load overrides or environment files; `include`, `extends`, and `volumes_from` are rejected. If your actual stack uses dynamically selected configuration, review a separately prepared, resolved static file and account for any inputs it leaves out.
 - Supports short Linux mount syntax and long `bind`, `volume`, and `tmpfs` syntax. Repeated or conflicting short access modes (such as `ro,rw`) and non-boolean long `read_only` values are rejected. Named volumes with external declarations, custom names, non-local drivers, or driver options are rejected. Paths are normalized lexically: the checker does not resolve relative binds against the project directory, resolve symlinks, inspect the host, or identify arbitrary socket names.
 - This is a targeted policy check, not a Compose schema validator or a production security review. It does not evaluate image defaults, GPU requests (`gpus` or deploy device reservations), service-to-service namespace sharing, other security options, port exposure, or effective filesystem permissions. A zero finding count only means the listed rules passed on the supplied file.
@@ -82,7 +82,7 @@ python3 -m compileall -q compose_guard.py tests
 python3 -m tabnanny compose_guard.py tests
 ```
 
-The tests cover valid and rejected inputs, path and numeric boundaries, file limits, fixture safety, and the CLI exit codes. The GitHub Actions workflow runs tests and byte-compilation on pushes and pull requests with read-only repository permissions.
+The tests cover valid and rejected inputs, path and numeric boundaries, input limits, fixture safety, and the CLI exit codes. The GitHub Actions workflow runs tests and byte-compilation on pushes and pull requests with read-only repository permissions.
 
 ## License and timeline
 
