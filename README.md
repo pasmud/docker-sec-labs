@@ -1,6 +1,6 @@
 # Docker Sec Labs
 
-Review Docker Compose hardening decisions without starting containers. The checker reads one local YAML file and reports which policy rule failed, where it failed, and what to change. The two lab fixtures store synthetic settings under `x-lab-services` and contain no deployable services.
+Review Docker Compose hardening decisions without starting containers. The checker reads one local YAML file and reports which policy rule failed, where it failed, and what to change. The lab fixtures store synthetic settings under `x-lab-services` and contain no deployable services.
 
 ## Quickstart
 
@@ -51,6 +51,13 @@ Text is the default. `--format json` emits one JSON object on stdout with `schem
    ```
 
    Think through the application tradeoffs: which directories actually need writes, and do their permissions match the selected UID/GID? The checker does not answer either question.
+3. **Review a read-only input workflow.** In [`exercises/03-review-target.fixture.yaml`](exercises/03-review-target.fixture.yaml), the sample worker needs to read a schema and reference directory, write temporary reports under `/work`, and use no devices. Identify the access mode of each mount before running the checker. The paths are synthetic placeholders; no source files are needed for this review.
+
+   ```sh
+   python3 compose_guard.py --format json exercises/03-review-target.fixture.yaml  # empty findings, exit 0
+   ```
+
+   In a scratch copy of the fixture, remove `:ro` from the first mount or remove the second mount's `read_only` key, one at a time. Recheck the copy. Each edit produces one `WRITABLE_BIND` finding at `volumes[0]` or `volumes[1]`, respectively: the service's read-only root does not make either bind read-only. The writable `/work` tmpfs gives the worker scratch space without granting write access to a bind source. If a proposed change added a device grant, ask which workload requirement justifies expanding access; this worker has none.
 
 ## What the checker enforces
 

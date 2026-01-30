@@ -1,0 +1,17 @@
+# Static review target. The input paths are placeholders, not lab assets.
+x-lab-services:
+  report-worker:
+    read_only: true
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    devices: []
+    device_cgroup_rules: []
+    volumes:
+      - ./samples/schema.json:/inputs/schema.json:ro
+      - type: bind
+        source: ./samples/reference
+        target: /inputs/reference
+        read_only: true
+      - type: tmpfs
+        target: /work

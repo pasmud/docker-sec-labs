@@ -8,12 +8,19 @@ from textwrap import indent
 
 import yaml
 
-from compose_guard import MAX_BYTES, MAX_DEPTH, MAX_NODES, InputError, assess, read_input
-
+from compose_guard import (
+    MAX_BYTES,
+    MAX_DEPTH,
+    MAX_NODES,
+    InputError,
+    assess,
+    read_input,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 RISKY = ROOT / "exercises" / "01-risky.fixture.yaml"
 HARDENED = ROOT / "exercises" / "02-hardened.fixture.yaml"
+REVIEW_TARGET = ROOT / "exercises" / "03-review-target.fixture.yaml"
 BASELINE = {
     "read_only": True,
     "user": "10001:10001",
@@ -274,7 +281,7 @@ class InputTests(unittest.TestCase):
 
 class CLITests(unittest.TestCase):
     def test_bundled_fixtures_have_no_startable_services(self):
-        for path in (RISKY, HARDENED):
+        for path in sorted((ROOT / "exercises").glob("*.fixture.yaml")):
             with self.subTest(path=path):
                 fixture = yaml.safe_load(path.read_text(encoding="utf-8"))
                 self.assertEqual(set(fixture), {"x-lab-services"})
@@ -294,6 +301,24 @@ class CLITests(unittest.TestCase):
     def test_hardened_fixture_exit_0(self):
         result = cli(HARDENED)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "0 finding(s).\n", ""))
+
+    def test_review_target_passes_but_requires_each_bind_access_mode(self):
+        result = cli("--format", "json", REVIEW_TARGET)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(json.loads(result.stdout)["findings"], [])
+
+        text = REVIEW_TARGET.read_text(encoding="utf-8")
+        for index in (0, 1):
+            with self.subTest(index=index):
+                fixture = yaml.safe_load(text)
+                mounts = fixture["x-lab-services"]["report-worker"]["volumes"]
+                if index == 0:
+                    mounts[0] = mounts[0].removesuffix(":ro")
+                else:
+                    del mounts[1]["read_only"]
+                findings = assess(yaml.safe_dump(fixture))
+                self.assertEqual([(f.code, f.service, f.field) for f in findings],
+                                 [("WRITABLE_BIND", "report-worker", f"volumes[{index}]")])
 
     def test_json_clean_report(self):
         result = cli("--format", "json", HARDENED)
